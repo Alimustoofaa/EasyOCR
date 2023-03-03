@@ -33,7 +33,7 @@ class Reader(object):
                  user_network_directory=None, detect_network="craft", 
                  recog_network='standard', download_enabled=True, 
                  detector=True, recognizer=True, verbose=True, 
-                 quantize=True, cudnn_benchmark=False):
+                 quantize=True, cudnn_benchmark=False, engine_model='torch'):
         """Create an EasyOCR Reader
 
         Parameters:
@@ -53,7 +53,7 @@ class Reader(object):
         """
         self.verbose = verbose
         self.download_enabled = download_enabled
-
+        self.engine_model = engine_model
         self.model_storage_directory = MODULE_PATH + '/model'
         if model_storage_directory:
             self.model_storage_directory = model_storage_directory
@@ -77,6 +77,9 @@ class Reader(object):
             self.device = 'cuda'
         else:
             self.device = gpu
+
+        if engine_model == 'onnx':
+            LOGGER.warning('Using ONNX. Note: This model load using onnx engine')
 
         self.detection_models = detection_models
         self.recognition_models = recognition_models
@@ -199,7 +202,10 @@ class Reader(object):
             self.setModelLanguage(recog_network, lang_list, available_lang, str(available_lang))
             #char_file = os.path.join(self.user_network_directory, recog_network+ '.txt')
             self.character = recog_config['character_list']
-            model_file = recog_network+ '.pth'
+            if engine_model == 'torch':
+                model_file = recog_network+ '.pth'
+            elif engine_model == 'onnx':
+                model_file = recog_network+ '.onnx'
             model_path = os.path.join(self.model_storage_directory, model_file)
             self.setLanguageList(lang_list, recog_config)
 
@@ -227,7 +233,8 @@ class Reader(object):
                 network_params = recog_config['network_params']
             self.recognizer, self.converter = get_recognizer(recog_network, network_params,\
                                                          self.character, separator_list,\
-                                                         dict_list, model_path, device = self.device, quantize=quantize)
+                                                         dict_list, model_path, device = self.device, quantize=quantize,\
+                                                         engine_model=engine_model)
 
     def getDetectorPath(self, detect_network):
         if detect_network in self.support_detection_network:
@@ -380,7 +387,7 @@ class Reader(object):
                 image_list, max_width = get_image_list(h_list, f_list, img_cv_grey, model_height = imgH)
                 result0 = get_text(self.character, imgH, int(max_width), self.recognizer, self.converter, image_list,\
                               ignore_char, decoder, beamWidth, batch_size, contrast_ths, adjust_contrast, filter_ths,\
-                              workers, self.device)
+                              workers, self.device, self.engine_model)
                 result += result0
             for bbox in free_list:
                 h_list = []
@@ -388,7 +395,7 @@ class Reader(object):
                 image_list, max_width = get_image_list(h_list, f_list, img_cv_grey, model_height = imgH)
                 result0 = get_text(self.character, imgH, int(max_width), self.recognizer, self.converter, image_list,\
                               ignore_char, decoder, beamWidth, batch_size, contrast_ths, adjust_contrast, filter_ths,\
-                              workers, self.device)
+                              workers, self.device, self.engine_model)
                 result += result0
         # default mode will try to process multiple boxes at the same time
         else:
